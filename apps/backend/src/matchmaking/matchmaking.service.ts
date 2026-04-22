@@ -48,6 +48,26 @@ export class MatchmakingService {
     return 99999;
   }
 
+  /**
+   * Drains queue entries that have been waiting longer than `thresholdMs`
+   * so the caller can fall them back onto a Stockfish game.
+   */
+  async takeBotFallbacks(thresholdMs: number): Promise<QueueEntry[]> {
+    const now = Date.now();
+    const modes = await this.store.modes();
+    const picked: QueueEntry[] = [];
+    for (const mode of modes) {
+      const entries = await this.store.all(mode);
+      for (const e of entries) {
+        if (now - e.enqueuedAt >= thresholdMs) {
+          await this.store.remove(mode, e.userId);
+          picked.push(e);
+        }
+      }
+    }
+    return picked;
+  }
+
   /** Periodic sweep — re-try matches for still-queued entries as tolerance widens. */
   async sweep(): Promise<MatchResult[]> {
     const modes = await this.store.modes();

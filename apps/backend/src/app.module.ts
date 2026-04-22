@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -15,7 +16,11 @@ import { HealthController } from './common/health.controller';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
+    // Two tiers: generous default, stricter on engine endpoints (set per-controller).
+    ThrottlerModule.forRoot([
+      { name: 'default', ttl: 60_000, limit: 240 },
+      { name: 'engine', ttl: 60_000, limit: 30 },
+    ]),
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -25,5 +30,6 @@ import { HealthController } from './common/health.controller';
     GatewayModule,
   ],
   controllers: [HealthController],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

@@ -14,7 +14,8 @@ export class UsersController {
   async get(@Param('id') id: string) {
     const u = await this.users.findById(id);
     if (!u) throw new NotFoundException();
-    const { passwordHash: _pw, ...rest } = u;
+    const { passwordHash, ...rest } = u;
+    void passwordHash;
     return rest;
   }
 

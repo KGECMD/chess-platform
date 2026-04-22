@@ -9,7 +9,10 @@ export function getSocket(token: string): Socket {
   if (socket && socket.connected) return socket;
   if (socket) socket.disconnect();
   socket = io(WS_URL, {
-    transports: ['websocket'],
+    // Allow polling fallback for providers / networks that block raw websockets
+    // (e.g. corporate proxies, some free tiers). Socket.IO will still upgrade
+    // to a websocket whenever possible.
+    transports: ['websocket', 'polling'],
     auth: { token },
     reconnection: true,
     reconnectionAttempts: 20,

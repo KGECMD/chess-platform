@@ -1,52 +1,90 @@
 # Deployment
 
-Two services: **backend on Render**, **frontend on Vercel**. Both use free tiers.
+The project ships with one-click deploy buttons for Render, Vercel, Cloudflare Pages, and Railway. Pick any combo of **one backend + one frontend**.
 
-## Backend (Render, via render.yaml blueprint)
+## Backend — Render (recommended)
 
-`render.yaml` provisions:
-- `chess-postgres` (Postgres free plan)
-- `chess-redis` (Redis free plan)
-- `chess-backend` (Docker web service, runs NestJS + Stockfish)
+Click **Deploy to Render** in the [README](./README.md#one-click-deploy). It reads [`render.yaml`](./render.yaml) and provisions:
 
-The Dockerfile installs the `stockfish` apt package so the binary is present at `/usr/games/stockfish`. On boot the container runs `prisma migrate deploy` then `node dist/main.js`.
+- `chess-postgres` — free Postgres
+- `chess-backend` — Docker web service (NestJS + Stockfish)
 
-Quick deploy:
+The Dockerfile installs the `stockfish` apt package so the binary is present at `/usr/games/stockfish`. On boot the container runs `prisma migrate deploy` (falling back to `prisma db push` if no migrations exist) then `node dist/main.js`.
 
-1. Push this repo to GitHub.
-2. In Render, **New → Blueprint**, point at this repo's `render.yaml`, apply.
-3. After the web service is live, copy its public URL (e.g. `https://chess-backend-XXXX.onrender.com`) and set the `CORS_ORIGIN` env var on the service to the Vercel frontend origin (see next section).
+> Render removed the free Redis plan. This blueprint skips Redis entirely and uses an in-memory matchmaking queue inside the backend. That's fine for a single backend instance; upgrade to a paid Redis (or Upstash) if you scale past one.
 
-Or automated via API (used by Devin sessions):
+After the web service is live, copy its public URL (e.g. `https://chess-backend-xxxx.onrender.com`) and set `CORS_ORIGIN` on the service to your frontend origin (see the frontend section).
+
+### Automated (used by Devin sessions)
 
 ```bash
-# creates the blueprint from GitHub
 curl -sX POST https://api.render.com/v1/blueprints \
   -H "Authorization: Bearer $RENDER_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"repo":"https://github.com/kayanerkama-alt/chess-platform","branch":"main"}'
 ```
 
-## Frontend (Vercel)
+## Backend — Railway (alternative)
 
-Configure the Vercel project with these env vars:
+Click **Deploy on Railway** in the README. Railway will detect the Dockerfile at `apps/backend/Dockerfile`, provision Postgres, and expose the HTTP port. Set the same env vars as in Render.
 
-- `NEXT_PUBLIC_API_URL` → `https://<your-render-backend>.onrender.com`
+## Frontend — Vercel
+
+Click **Deploy with Vercel** in the README and set these env vars when prompted:
+
+- `NEXT_PUBLIC_API_URL` → `https://<your-backend>.onrender.com`
 - `NEXT_PUBLIC_WS_URL` → same (Socket.IO upgrades to WebSocket)
 
-The frontend root is `apps/frontend`. The `vercel.json` at the repo root directs Vercel to build the Next.js app in that subdirectory.
+The frontend root is `apps/frontend`. The Vercel button link already sets `root-directory=apps/frontend`.
 
-Quick deploy:
+Manual deploy:
 
 ```bash
-# from repo root
 npx vercel --yes --cwd apps/frontend
-# on first run, link the project; then set env:
 npx vercel env add NEXT_PUBLIC_API_URL production
 npx vercel env add NEXT_PUBLIC_WS_URL production
 npx vercel deploy --prod --cwd apps/frontend
 ```
 
-## Post-deploy
+## Frontend — Cloudflare Pages
 
-Update the backend's `CORS_ORIGIN` env var to the Vercel production URL so browsers can talk to it. Then reload any open tabs and you're done.
+Two options:
+
+### Dashboard (easiest)
+
+1. In Cloudflare → Workers & Pages → Create → Pages → Connect to Git.
+2. Select the repo.
+3. Framework preset: **Next.js**.
+4. Build command: `pnpm install --no-frozen-lockfile && pnpm --filter @chess/frontend exec next-on-pages`.
+5. Build output directory: `apps/frontend/.vercel/output/static`.
+6. Root directory: `/`.
+7. Env vars: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL`, and `NODE_VERSION=20`.
+
+### Wrangler CLI
+
+```bash
+cd apps/frontend
+pnpm install --no-frozen-lockfile
+pnpm exec next-on-pages
+npx wrangler pages deploy .vercel/output/static --project-name chess-frontend
+```
+
+`apps/frontend/wrangler.toml` pins Node 20 and the `nodejs_compat` runtime flag so Next.js server components work on Cloudflare's runtime.
+
+## Post-deploy checklist
+
+- [ ] Backend `CORS_ORIGIN` set to the frontend origin (Vercel URL or `*.pages.dev`)
+- [ ] Frontend `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_WS_URL` set to the backend URL
+- [ ] Visit `https://<backend>/health` — expect `{ "ok": true, "ts": ... }`
+- [ ] Visit the frontend root — a guest session should be created automatically in the top-right nav
+- [ ] Queue a game in `/play` — after ~15s with no opponent you should be paired with `StockfishAI`
+
+## Troubleshooting
+
+**`CORS` errors in the browser console** — `CORS_ORIGIN` on the backend doesn't include the exact frontend origin. It must include scheme + host + optional port. Comma-separate multiple values.
+
+**Render free Postgres expired** — Render free Postgres instances are destroyed after 30 days. Re-provision by deleting and re-applying the blueprint, or upgrade to the starter plan.
+
+**WebSocket disconnects / polling-only** — some corporate networks block raw WebSockets. The client already falls back to long-polling automatically; nothing to do.
+
+**`Stockfish not found`** — the Dockerfile installs the `stockfish` apt package. If you're running without Docker, set `STOCKFISH_PATH` to the absolute path of your binary.

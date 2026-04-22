@@ -5,12 +5,6 @@ databases:
     region: oregon
 
 services:
-  - type: redis
-    name: chess-redis
-    plan: free
-    region: oregon
-    ipAllowList: []
-
   - type: web
     name: chess-backend
     runtime: docker
@@ -34,10 +28,9 @@ services:
         fromDatabase:
           name: chess-postgres
           property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: chess-redis
-          property: connectionString
+      - key: BOT_FALLBACK_MS
+        value: "15000"
+      - key: BOT_FALLBACK_LEVEL
+        value: "6"
       - key: CORS_ORIGIN
         sync: false

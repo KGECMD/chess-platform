@@ -135,12 +135,21 @@ export class PlayGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     const u = this.getUser(client);
     if (!u) return;
     const state = await this.games.get(body.gameId);
-    if (state.players.white.id !== u.userId && state.players.black.id !== u.userId && !state.vsAi) {
-      // Spectator join allowed for public rooms — for now just allow everyone.
-    }
     const roomId = `game:${body.gameId}`;
     client.join(roomId);
     client.emit('server', { type: 'game_state', game: state });
+
+    // Kick off the first AI move if the AI plays white (or if for any reason
+    // the AI's turn is pending when the human joined).
+    if (state.vsAi && state.status === 'in_progress') {
+      const aiIsWhite = state.players.white.username === 'StockfishAI';
+      const aiIsTurn = (state.turn === 'white' && aiIsWhite) || (state.turn === 'black' && !aiIsWhite);
+      if (aiIsTurn) {
+        this.triggerAiMove(body.gameId).catch((err) =>
+          this.logger.error(`AI first-move failed: ${(err as Error).message}`),
+        );
+      }
+    }
   }
 
   @SubscribeMessage('move')
@@ -249,6 +258,30 @@ export class PlayGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         if (bSocket) this.server.sockets.sockets.get(bSocket)?.join(roomId);
         this.server.to(roomId).emit('server', { type: 'match_found', game: state });
       }
+
+      // Auto-fallback to Stockfish after the configured wait threshold. Keeps the
+      // lobby feeling alive when no human opponents are online.
+      const fallbackMs = Number(process.env.BOT_FALLBACK_MS ?? 15_000);
+      if (fallbackMs > 0) {
+        const fallbacks = await this.matchmaking.takeBotFallbacks(fallbackMs);
+        for (const entry of fallbacks) {
+          const level = Number(process.env.BOT_FALLBACK_LEVEL ?? 6);
+          const userPlaysWhite = Math.random() > 0.5;
+          const state = await this.games.createAiGame({
+            userId: entry.userId,
+            userPlaysWhite,
+            aiLevel: level,
+            timeControl: { initial: entry.initial, increment: entry.increment },
+          });
+          const roomId = `game:${state.id}`;
+          const socketId = this.userToSocket.get(entry.userId);
+          if (socketId) {
+            this.server.sockets.sockets.get(socketId)?.join(roomId);
+          }
+          this.server.to(roomId).emit('server', { type: 'match_found', game: state });
+        }
+      }
+
       const flagged = await this.games.checkFlags();
       for (const gameId of flagged) {
         const state = await this.games.get(gameId);

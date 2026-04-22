@@ -27,7 +27,7 @@ export default function PlayLobby() {
     setQueuedMode(mode);
     setStatus(`Searching opponent for ${mode}…`);
     const onServer = (evt: ServerEvent) => {
-      if (evt.type === 'queued') setStatus(evt.mode === 'cancelled' ? 'Cancelled' : `Queued for ${evt.mode}`);
+      if (evt.type === 'queued') setStatus(evt.mode === 'cancelled' ? 'Cancelled' : `Queued for ${evt.mode} — if nobody joins we'll match you with Stockfish.`);
       else if (evt.type === 'match_found') {
         sock.off('server', onServer);
         router.push(`/game/${evt.game.id}`);
@@ -49,7 +49,10 @@ export default function PlayLobby() {
     <section className="space-y-6 max-w-2xl">
       <div>
         <h1 className="text-2xl font-bold text-white">Find a match</h1>
-        <p className="text-neutral-400 text-sm mt-1">Pick a time control. We&apos;ll pair you with an opponent of similar rating.</p>
+        <p className="text-neutral-400 text-sm mt-1">
+          Pick a time control. We&apos;ll pair you with an opponent of similar rating — if nobody shows up within ~15s,
+          you&apos;ll get a Stockfish game instead so you never wait around.
+        </p>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {MODES.map((m) => (
