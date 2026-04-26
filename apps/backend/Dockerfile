@@ -1,24 +1,23 @@
 ARG NODE_VERSION=20
 
 FROM node:${NODE_VERSION}-bookworm-slim AS base
-ENV PNPM_HOME=/usr/local/pnpm
-ENV PATH=$PNPM_HOME:$PATH
-RUN corepack enable && corepack prepare pnpm@9.15.1 --activate
 RUN apt-get update \
   && apt-get install -y --no-install-recommends stockfish openssl ca-certificates tini \
   && rm -rf /var/lib/apt/lists/*
+RUN npm install -g yarn@1.22.22 --force
 WORKDIR /app
 
 FROM base AS deps
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* ./
+COPY package.json yarn.lock .yarnrc ./
 COPY apps/backend/package.json apps/backend/package.json
+COPY apps/frontend/package.json apps/frontend/package.json
 COPY packages/shared/package.json packages/shared/package.json
-RUN pnpm install --no-frozen-lockfile
+RUN yarn install --frozen-lockfile --ignore-engines --network-timeout 600000
 
 FROM deps AS build
 COPY . .
-RUN pnpm --filter @chess/backend exec prisma generate
-RUN pnpm --filter @chess/backend build
+RUN yarn workspace @chess/backend prisma:generate
+RUN yarn workspace @chess/backend build
 
 FROM base AS runtime
 ENV NODE_ENV=production
@@ -30,7 +29,7 @@ COPY --from=build /app/apps/backend/dist ./apps/backend/dist
 COPY --from=build /app/apps/backend/node_modules ./apps/backend/node_modules
 COPY --from=build /app/apps/backend/package.json ./apps/backend/package.json
 COPY --from=build /app/apps/backend/prisma ./apps/backend/prisma
-COPY --from=build /app/package.json /app/pnpm-workspace.yaml ./
+COPY --from=build /app/package.json /app/yarn.lock ./
 EXPOSE 4000
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["sh", "-c", "cd apps/backend && npx prisma migrate deploy || npx prisma db push --accept-data-loss; node dist/main.js"]

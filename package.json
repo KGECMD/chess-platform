@@ -2,17 +2,23 @@
   "name": "chess-platform",
   "private": true,
   "version": "0.1.0",
-  "description": "Open-source chess platform (Lichess-style) with real-time multiplayer, Stockfish AI, matchmaking, Elo, and analysis.",
-  "packageManager": "pnpm@9.15.1",
+  "description": "Open-source chess platform (Lichess-style) with real-time multiplayer, Stockfish AI, matchmaking with bot fallback, Elo, and post-game analysis.",
+  "packageManager": "yarn@1.22.22",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev:backend": "pnpm --filter @chess/backend dev",
-    "dev:frontend": "pnpm --filter @chess/frontend dev",
-    "build": "pnpm -r build",
-    "build:backend": "pnpm --filter @chess/backend build",
-    "build:frontend": "pnpm --filter @chess/frontend build",
-    "lint": "pnpm -r lint",
-    "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "dev:backend": "yarn workspace @chess/backend dev",
+    "dev:frontend": "yarn workspace @chess/frontend dev",
+    "build": "yarn workspaces run build",
+    "build:backend": "yarn workspace @chess/backend build",
+    "build:frontend": "yarn workspace @chess/frontend build",
+    "lint": "yarn workspaces run lint",
+    "test": "yarn workspaces run test",
+    "typecheck": "yarn workspaces run typecheck",
+    "prisma:generate": "yarn workspace @chess/backend prisma:generate",
+    "format": "echo formatting-noop"
   },
   "engines": {
     "node": ">=20"
