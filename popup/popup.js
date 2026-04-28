@@ -9,8 +9,13 @@ const CHECKBOXES = ['enabled', 'autoMove', 'showArrows', 'useStockfish', 'humani
 const RANGES = { engineDepth: 'depthVal', multiPv: 'pvVal', strength: 'strengthVal' };
 
 function loadSettings() {
-  chrome.runtime.sendMessage({ type: 'GET_SETTINGS' }, (settings) => {
-    if (!settings) return;
+  const defaults = {
+    enabled: true, autoMove: false, showArrows: true, engineDepth: 18,
+    useStockfish: true, humanize: true, minDelay: 800, maxDelay: 3500,
+    showEval: true, multiPv: 1, strength: 100
+  };
+  chrome.storage.local.get(defaults, (settings) => {
+    if (chrome.runtime.lastError || !settings) return;
     for (const field of FIELDS) {
       const el = document.getElementById(field);
       if (!el) continue;
@@ -20,7 +25,6 @@ function loadSettings() {
         el.value = settings[field];
       }
     }
-    // Update range displays
     for (const [id, display] of Object.entries(RANGES)) {
       const el = document.getElementById(display);
       if (el) el.textContent = document.getElementById(id).value;
@@ -42,7 +46,7 @@ function saveSettings() {
     }
   }
 
-  chrome.runtime.sendMessage({ type: 'SAVE_SETTINGS', settings });
+  chrome.storage.local.set(settings);
 
   // Notify content scripts
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
